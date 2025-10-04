@@ -2,7 +2,8 @@ all: run
 
 run:
 	@if [ -f .env ]; then \
-		export $$(cat .env | grep -v '^#' | xargs) && swift run; \
+		export $$(cat .env | grep -v '^#' | xargs) && \
+		swift run 2>&1 | grep -v "warning:"; \
 	else \
 		echo "Error: .env file not found"; \
 		exit 1; \
@@ -19,4 +20,13 @@ build:
 clean:
 	swift package clean
 
-.PHONY: run build clean
+# Debug mode with all output
+debug:
+	@if [ -f .env ]; then \
+		export $$(cat .env | grep -v '^#' | xargs) && swift run; \
+	else \
+		echo "Error: .env file not found"; \
+		exit 1; \
+	fi
+
+.PHONY: run build clean debug
