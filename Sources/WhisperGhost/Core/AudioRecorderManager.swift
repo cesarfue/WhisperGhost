@@ -1,4 +1,5 @@
 import AVFoundation
+import Cocoa
 import SwiftUI
 
 @MainActor
@@ -113,9 +114,23 @@ class AudioRecorderManager: ObservableObject {
     }
 
     private func handleSuccessfulTranscription(_ text: String) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        typeTextAtCursor(text)
+    }
+
+    private func typeTextAtCursor(_ text: String) {
+        for char in text {
+            let string = String(char)
+            guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+                let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)
+            else { continue }
+
+            let unicode = UniChar(string.utf16.first!)
+            keyDown.keyboardSetUnicodeString(stringLength: 1, unicodeString: [unicode])
+            keyDown.post(tap: .cghidEventTap)
+
+            keyUp.keyboardSetUnicodeString(stringLength: 1, unicodeString: [unicode])
+            keyUp.post(tap: .cghidEventTap)
+        }
     }
 
     func cleanup() {

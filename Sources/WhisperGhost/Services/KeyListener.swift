@@ -1,38 +1,74 @@
-import AppKit
+import Cocoa
 
 class KeyListener {
-    private var keyDownMonitor: Any?
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
     private var onStart: (() -> Void)?
     private var onStop: (() -> Void)?
-    private var key: Int
+    private var keyCodeToMonitor: CGKeyCode
+    private var isPressed = false  // track Fn key state
 
-    init(onStart: @escaping () -> Void, onStop: @escaping () -> Void) {
+    init(onStart: @escaping () -> Void, onStop: @escaping () -> Void, key: CGKeyCode = 63) {
         self.onStart = onStart
         self.onStop = onStop
-        self.key = 63
+        self.keyCodeToMonitor = key
     }
 
     func startListening() {
-        keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) {
-            [weak self] event in
-            guard let self = self else { return event }
+        guard eventTap == nil else { return }
 
-            if event.keyCode == self.key {
-                if event.modifierFlags.contains(.function) {
-                    self.onStart?()
-                } else {
-                    self.onStop?()
-                }
+        let mask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+        let refcon = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
+            guard type == .flagsChanged else { return Unmanaged.passUnretained(event) }
+
+            let listener = Unmanaged<KeyListener>.fromOpaque(refcon!).takeUnretainedValue()
+            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+
+            guard keyCode == listener.keyCodeToMonitor else {
+                return Unmanaged.passUnretained(event)
             }
 
-            return event
+            let pressed = event.flags.contains(.maskSecondaryFn)  // detect Fn key down
+            if pressed && !listener.isPressed {
+                listener.isPressed = true
+                listener.onStart?()
+            } else if !pressed && listener.isPressed {
+                listener.isPressed = false
+                listener.onStop?()
+            }
+
+            return Unmanaged.passUnretained(event)
         }
+
+        eventTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: callback,
+            userInfo: refcon
+        )
+
+        guard let eventTap = eventTap else {
+            print("Failed to create global key event tap")
+            return
+        }
+
+        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
     func stopListening() {
-        if let monitor = keyDownMonitor {
-            NSEvent.removeMonitor(monitor)
-            keyDownMonitor = nil
+        if let eventTap = eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+            if let runLoopSource = runLoopSource {
+                CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+            }
+            self.eventTap = nil
+            self.runLoopSource = nil
         }
     }
 
