@@ -16,9 +16,13 @@ struct WhisperGhostApp: App {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+
+    var overlayWindow: OverlayWindow?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureAppearance()
         activateAndCenterWindow()
+        showOverlay()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -36,5 +40,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.makeKeyAndOrderFront(nil)
             window.center()
         }
+    }
+
+    private func showOverlay() {
+        overlayWindow = OverlayWindow()
+        overlayWindow?.makeKeyAndOrderFront(nil)
     }
 }
